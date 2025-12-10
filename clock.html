@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Clock, Timer, Stopwatch, and Countdown</title>
+    
+    <style>
+        /* 
+        CSS to make the page appealing and seperate each section clearly.
+        */
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-image:linear-gradient(to right,#ffb9b9,#ff9a9a);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        section {
+            background-color: white;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #2c3e50;
+            border-bottom: 2px solid #238701;
+            padding-bottom: 10px;
+        }
+
+        /* Hidden class for countdown message */
+        .hidden {
+            display: none;
+        }
+
+        .display {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 15px 0;
+        }
+
+        label {
+            display: block;
+            margin: 10px 0 5px 0;
+            font-weight: bold;
+        }
+
+        input[type="number"],
+        input[type="datetime-local"] {
+            padding: 8px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px 0;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #e66f1f;
+            color: white;
+        }
+
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+
+
+    </style>
+
+    <script>
+        'use strict';
+
+        /*
+        Ticker class implements the singleton and observer patterns.
+        Singleton ensures only one ticker manages all time updates, preventing
+        multiple setTimeout chains that would cause inconsistent updates.
+        Observer pattern allows Clock, Timer, Stopwatch, and Countdown to register
+        for updates without tight coupling.
+        */
+        class Ticker {
+            constructor() {
+                /* 
+                The Ticker must be a singleton because multiple tickers would create multiple 
+                setTimeout chains, causing the clock/timer/stopwatch/countdown to update at inconsistent intervals and waste resources.
+                */
+                if (Ticker.instance) {
+                    throw new Error("Ticker already exists");
+                }
+                Ticker.instance = this;
+
+                this.observers = [];
+                this.isRunning = false;
+            }
+
+            /*
+            addObserver allows other classes to register for notifications.
+            Each observer must has an update() method.
+            */
+            addObserver(observer) {
+                this.observers.push(observer);
+            }
+
+            /*
+            notify calls update() on all observers.
+            This is called approximately once per second.
+            */
+            notify() {
+                this.observers.forEach(observer =>{
+                    observer.update()
+                });
+            
+            }
+
+            /*
+            start begins the ticker's setTimeout chain.
+            */
+            start() {
+                this.tick();
+            }
+
+            /*
+            tick is called recursively via setTimeout.
+            It notifies observers and then schedules the next tick.
+            This ensures only one setTimeout runs at a time.
+            */
+            tick() {
+                this.notify();
+                setTimeout(() => this.tick(), 1000);
+            
+            }
+        }
+
+        /*
+        Clock class displays the current time.
+        It registers with Ticker and updates the DOM every second.
+        */
+        class Clock {
+            constructor() {
+                this.displayElement = document.getElementById("clock-display")
+                this.ticker = Ticker.instance;
+                this.ticker.addObserver(this);
+            }
+
+            /*
+            update is called by Ticker approximately once per second.
+            It gets the current time and updates the DOM.
+            */
+            update() {
+                const now = new Date();
+                const hours = now.getHours();       
+                const minutes = now.getMinutes();      
+                const seconds = now.getSeconds();
+
+                /* From the prompt: How do you format time in Javascript to get the correct number of zeros?
+                Claude Sonnet 4.5, Anthropic, 2025-10-12, https://claude.ai/chat/deb93d45-5ac1-464f-b5aa-d5d211a25678*/
+                const formattedTime = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                this.displayElement.textContent = formattedTime
+            }
+        }
+
+        /*
+        Timer class implements a countdown timer.
+        The checkbox controls whether it runs, and it counts down from
+        the user-specified minutes and seconds.
+        https://www.geeksforgeeks.org/javascript/javascript-timer/
+        */
+        class Timer {
+            constructor() {
+                this.displayElement = document.getElementById("timer-display");
+                this.minutesInput = document.getElementById("timer-minutes");
+                this.secondsInput = document.getElementById("timer-seconds");
+                this.runningCheckbox = document.getElementById("timer-running");
+                
+                // Variable to track remaining time
+                this.remainingTimeInSeconds = 0;
+                
+                this.ticker = Ticker.instance;
+                this.ticker.addObserver(this);
+            }
+
+            /*
+            update is called every second by Ticker.
+            It decrements the timer if running and updates the display.
+            */
+            update() {
+                const isRunning = this.runningCheckbox.checked;
+                
+                // If the timer is not running, enable inputs and reset time to 0 
+                if (!isRunning) {
+                    this.displayElement.textContent = "Timer stopped";
+                    this.minutesInput.disabled = false;
+                    this.secondsInput.disabled = false;
+                    this.remainingTimeInSeconds = 0;
+                    return; 
+                }
+
+                
+                this.minutesInput.disabled = true;
+                this.secondsInput.disabled = true;
+
+                /* Check to see if the timer is starting fresh then load time from the input fields*/
+                if (this.remainingTimeInSeconds === 0) {
+                    let minutes = parseInt(this.minutesInput.value);
+                    let seconds = parseInt(this.secondsInput.value);
+                    this.remainingTimeInSeconds = minutes * 60 + seconds;
+                }
+
+                // Decrement time remaing if greater than 0
+                if (this.remainingTimeInSeconds > 0) {
+                    this.remainingTimeInSeconds--;
+                }
+
+                // Checks if the timer has run out, if it has display Time's Up and enable inputs
+                if (this.remainingTimeInSeconds === 0) {
+                    this.displayElement.textContent = "Time's Up!";
+                    this.runningCheckbox.checked = false;
+                    this.minutesInput.disabled = false;
+                    this.secondsInput.disabled = false;
+                // If time is not up, get the current number of minutes and seconds and display them
+                } else {
+                    const minutes = Math.floor(this.remainingTimeInSeconds / 60);
+                    const seconds = this.remainingTimeInSeconds % 60;
+                    this.displayElement.textContent = `${minutes}:${seconds}`;
+                }
+            }
+        }
+                    
+
+        /*
+        Stopwatch class tracks elapsed time.
+        Start begins timing, Stop pauses, Reset goes back to zero.
+        https://www.geeksforgeeks.org/javascript/how-to-create-stopwatch-using-html-css-and-javascript/
+        */
+        class Stopwatch {
+            constructor() {
+                this.displayElement = document.getElementById("stopwatch-display");
+                this.startButton = document.getElementById("stopwatch-start");
+                this.stopButton = document.getElementById("stopwatch-stop");
+                this.resetButton = document.getElementById("stopwatch-reset");
+
+                this.timeElapsed = 0;
+                this.running = false;
+                
+                this.startButton.addEventListener('click', () => this.handleStart());
+                this.stopButton.addEventListener('click', () => this.handleStop());
+                this.resetButton.addEventListener('click', () => this.handleReset());
+                
+                this.ticker = Ticker.instance;
+                this.ticker.addObserver(this)
+            }
+
+            /*
+            update is called every second by Ticker.
+            If running, it increments elapsed time and updates display.
+            */
+            update() {
+                if (this.running) {
+                    this.timeElapsed++;
+
+                    // Get hours and minutes from amount fo seconds that have elapsed
+                    const hours = Math.floor(this.timeElapsed / 3600);
+                    const minutes = Math.floor((this.timeElapsed % 3600) / 60);
+                    const seconds = this.timeElapsed % 60;
+                    
+                    // Formatted with proper nu,ber of zeros
+                    const formattedTime = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.000`;
+                    this.displayElement.textContent = formattedTime;
+                }
+            }
+
+            /*
+            Event handlers for the three buttons.
+            These change the running state and update button states.
+            */
+            handleStart() {
+                this.running = true;
+                this.startButton.disabled = true;
+                this.stopButton.disabled = false;
+            }
+
+            handleStop() {
+                this.running = false;
+                this.stopButton.disabled = true;
+                this.startButton.disabled = false;
+            }
+
+            handleReset() {
+                this.running = false;
+                this.timeElapsed = 0;
+                this.startButton.disabled = false;
+                this.stopButton.disabled = true;
+                this.displayElement.textContent = "0:00:00.000";
+            }
+        }
+        
+
+        /*
+        Countdown class counts down to (or up from) a user-selected date/time.
+        It shows years, months, days, hours, minutes, and seconds.
+        When the countdown reaches zero, a hidden element is revealed.
+        https://www.geeksforgeeks.org/javascript/create-countdown-timer-using-javascript/
+        */
+        class Countdown {
+            constructor() {
+                
+                this.countdownTarget = document.getElementById("countdown-target");
+                this.displayElement = document.getElementById("countdown-display");
+                this.hiddenMessage = document.getElementById("countdown-message");
+                this.hasReachedZero = false;
+                this.ticker = Ticker.instance;
+                this.ticker.addObserver(this);
+            }
+
+            /*
+            From the prompt: How can I alter this function to account for month and year? 
+            Claude Sonnet 4.5, Anthropic, 2025-10-13, https://claude.ai/chat/32f75a56-0fe9-463d-aa80-95a784246a39 
+            update is called every second by Ticker.
+            It calculates the difference between target time and now.
+            */
+            update() {
+            // Check if target date is set
+                if (!this.countdownTarget.value) {
+                this.displayElement.textContent = "Please select a date and time";
+                return;
+                }
+
+                let deadline = new Date(this.countdownTarget.value);
+                
+                
+                // Determine if counting down (deadline is after current date) or up (deadline is before current date)
+                let isPast = deadline < new Date();
+
+                // Hide message if user changes to a future date (countdown has not been completed)
+                if (!isPast && this.hasReachedZero) {
+                this.hiddenMessage.classList.add("hidden");
+                this.hasReachedZero = false; // Countdown did not complete
+                }
+
+                // Reveal hidden message when countdown reaches zero (first time only)
+                if (isPast && !this.hasReachedZero) {
+                this.hiddenMessage.classList.remove("hidden");
+                this.hasReachedZero = true; // Countdown did complete
+                }
+                
+                // Swap dates if counting up (past event)
+                let startDate = isPast ? deadline : now;
+                let endDate = isPast ? now : deadline;
+                
+                // Calculate years, months, days, hours, minutes, seconds
+                let years = endDate.getFullYear() - startDate.getFullYear();
+                let months = endDate.getMonth() - startDate.getMonth();
+                let days = endDate.getDate() - startDate.getDate();
+                let hours = endDate.getHours() - startDate.getHours();
+                let minutes = endDate.getMinutes() - startDate.getMinutes();
+                let seconds = endDate.getSeconds() - startDate.getSeconds();
+                
+                // In order for values to not reach the negatives, borrow from larger units (Example: if hours reach 0, you take away a day and begin the hours at 24)
+                if (seconds < 0) {
+                    seconds += 60;
+                    minutes--;
+                }
+                if (minutes < 0) {
+                    minutes += 60;
+                    hours--;
+                }
+                if (hours < 0) {
+                    hours += 24;
+                    days--;
+                }
+                if (days < 0) {
+                    // Need to determine number of days in previous month in order to "borrow" days to prevent days from appearing negative
+                    let prevMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+                    days += prevMonth.getDate();
+                    months--;
+                }
+                if (months < 0) {
+                    months += 12;
+                    years--;
+                }
+                
+                // Display the result
+                if (isPast) {
+                    this.displayElement.textContent =
+                        `${years} years ${months} months ${days} days ${hours} hours ${minutes} minutes ${seconds} seconds ago`;
+                } else {
+                    this.displayElement.textContent =
+                        `${years} years ${months} months ${days} days ${hours} hours ${minutes} minutes ${seconds} seconds remaining`;
+                }
+            }
+    }
+
+        /*
+        main initializes the application after the DOM loads.
+        It creates the Ticker singleton and all other components,
+        then starts the ticker to begin updates.
+        */
+        function main() {
+            const ticker = new Ticker();
+            const clock = new Clock();
+            const timer = new Timer();
+            const stopwatch = new Stopwatch();
+            const countdown = new Countdown();
+            ticker.start();
+        }
+
+        /*
+        Wait for DOM to load before running main.
+        This ensures all elements exist before referncing them.
+        */
+        window.addEventListener('load', main);
+    </script>
+</head>
+<body>
+    <h1>Time Management App</h1>
+
+    <!-- Clock section displays current time -->
+    <section>
+        <h2>Clock</h2>
+        <p id="clock-display" class="display">--:--:--</p>
+    </section>
+
+    <!-- Timer section allows countdown from user inputted time -->
+    <section>
+        <h2>Timer</h2>
+        <label for="timer-minutes">Minutes:</label>
+        <input type="number" id="timer-minutes" min="0" value="0">
+        
+        <label for="timer-seconds">Seconds:</label>
+        <input type="number" id="timer-seconds" min="0" max="59" value="0">
+        
+        <label for="timer-running">
+            <input type="checkbox" id="timer-running"> Running
+        </label>
+        
+        <p id="timer-display" class="display">0:00</p>
+    </section>
+
+    <!-- Stopwatch section tracks elapsed time with controls -->
+    <section>
+        <h2>Stopwatch</h2>
+        <p id="stopwatch-display" class="display">0:00:00.000</p>
+        <button id="stopwatch-start">Start</button>
+        <button id="stopwatch-stop" disabled>Stop</button>
+        <button id="stopwatch-reset">Reset</button>
+    </section>
+
+    <!-- Countdown section counts to/from a target date and time -->
+    <section>
+        <h2>Countdown</h2>
+        <label for="countdown-target">Target Date and Time:</label>
+        <input type="datetime-local" id="countdown-target">
+        
+        <p id="countdown-display" class="display">Please select a date and time</p>
+        
+        <!-- Hidden message revealed when countdown reaches zero -->
+        <p id="countdown-message" class="hidden">🎉 Woohoo Countdown Completed!!</p>
+    </section>
+</body>
+</html>
